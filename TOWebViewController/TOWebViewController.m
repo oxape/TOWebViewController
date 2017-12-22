@@ -255,6 +255,7 @@
     }
     
     //Create the web view
+    self.navigationController.navigationBar.translucent = NO;
     self.webView = [[UIWebView alloc] initWithFrame:self.view.bounds];
     self.webView.delegate = self.progressManager;
     self.webView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
