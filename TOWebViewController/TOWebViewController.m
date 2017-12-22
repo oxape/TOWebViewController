@@ -1,7 +1,7 @@
 //
 //  TOWebViewController.m
 //
-//  Copyright 2013-2016 Timothy Oliver. All rights reserved.
+//  Copyright 2013-2017 Timothy Oliver. All rights reserved.
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to
@@ -53,10 +53,10 @@
 #define NAVIGATION_ICON_SPACING             25
 
 /* Toolbar Properties */
-#define TOOLBAR_HEIGHT      44.0f
+#define TOOLBAR_HEIGHT ((CGFloat)44.f)
 
 /* Hieght of the loading progress bar view */
-#define LOADING_BAR_HEIGHT          2
+#define LOADING_BAR_HEIGHT ((CGFloat)2.f)        
 
 #pragma mark -
 #pragma mark Hidden Properties/Methods
@@ -64,7 +64,7 @@
                                    UIPopoverControllerDelegate,
                                    MFMailComposeViewControllerDelegate,
                                    MFMessageComposeViewControllerDelegate,
-                                   NJKWebViewProgressDelegate>
+                                   NJKWebViewProgressDelegate,CAAnimationDelegate>
 {
     
     //The state of the UIWebView's scroll view before the rotation animation has started
@@ -221,6 +221,7 @@
     _showLoadingBar   = YES;
     _showUrlWhileLoading = YES;
     _showPageTitles   = YES;
+    _showPageHost   = NO;
     _initialLoad      = YES;
     
     _progressManager = [[NJKWebViewProgress alloc] init];
@@ -257,14 +258,14 @@
     //Create the web view
     self.webView = [[UIWebView alloc] initWithFrame:self.view.bounds];
     self.webView.delegate = self.progressManager;
-    self.webView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
     self.webView.backgroundColor = [UIColor clearColor];
+    self.webView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
     self.webView.scalesPageToFit = YES;
     self.webView.contentMode = UIViewContentModeRedraw;
-    self.webView.opaque = YES;
+    self.webView.opaque = NO; // Must  be NO to avoid the initial black bars
     [self.view addSubview:self.webView];
 
-    CGFloat progressBarHeight = 2.f;
+    CGFloat progressBarHeight = LOADING_BAR_HEIGHT;
     CGRect navigationBarBounds = self.navigationController.navigationBar.bounds;
     CGRect barFrame = CGRectMake(0, navigationBarBounds.size.height - progressBarHeight, navigationBarBounds.size.width, progressBarHeight);
     self.progressView = [[NJKWebViewProgressView alloc] initWithFrame:barFrame];
@@ -420,6 +421,8 @@
     return UIStatusBarStyleDefault;
 }
 
+- (BOOL)prefersStatusBarHidden { return NO; }
+
 #pragma mark - Screen Rotation Interface -
 - (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)toInterfaceOrientation
 {
@@ -499,6 +502,18 @@
 }
 
 #pragma mark - View Layout/Transitions -
+- (void)viewDidLayoutSubviews
+{
+    // For some reason, the web pages were being inset correctly on iOS 11.2
+    // This brute forces the content inset to make sure it's being set each time
+    if (@available(iOS 11.0, *)) {
+        UIEdgeInsets insets = UIEdgeInsetsZero;
+        insets.top = CGRectGetMaxY(self.navigationBar.frame);
+        self.webView.scrollView.contentInset = insets;
+        self.webView.scrollView.scrollIndicatorInsets = insets;
+    }
+}
+
 - (void)layoutButtonsForCurrentSizeClass
 {
     [self.navigationController setToolbarHidden:(!self.compactPresentation || self.navigationButtonsHidden) animated:NO];
@@ -559,7 +574,7 @@
             if (self.actionButton)      { [items addObject:self.actionButton]; }
         }
         
-        UIBarButtonItem *(^flexibleSpace)() = ^{
+        UIBarButtonItem *(^flexibleSpace)(void) = ^{
             return [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil];
         };
         
@@ -781,6 +796,20 @@
     [self refreshButtonsState];
 }
 
+- (void)setShowPageHost:(BOOL)showPageHost {
+    _showPageHost = showPageHost;
+    if (_showPageHost && _showPageTitles) {
+        _showPageTitles = NO;
+    }
+}
+
+- (void)setShowPageTitles:(BOOL)showPageTitles {
+    _showPageTitles = showPageTitles;
+    if (_showPageTitles && _showPageHost) {
+        _showPageHost = NO;
+    }
+}
+
 #pragma mark -
 #pragma mark WebView Delegate
 - (BOOL)webView:(UIWebView *)webView shouldStartLoadWithRequest:(NSURLRequest *)request navigationType:(UIWebViewNavigationType)navigationType
@@ -796,6 +825,13 @@
     return shouldStart;
 }
 
+- (void)webView:(UIWebView *)webView didFailLoadWithError:(NSError *)error
+{
+    //If a request handler has been set, check to see if we should go ahead
+    if (self.didFailLoadWithErrorRequestHandler)
+        return self.didFailLoadWithErrorRequestHandler(error);
+}
+
 - (void)webViewDidStartLoad:(UIWebView *)webView
 {
     //show that loading started in the status bar
@@ -805,7 +841,8 @@
     [self refreshButtonsState];
 }
 
--(void)webViewDidFinishLoad:(UIWebView *)webView{
+-(void)webViewDidFinishLoad:(UIWebView *)webView
+{
     if(self.didFinishLoadHandler){
         self.didFinishLoadHandler(webView);
     }
@@ -815,6 +852,12 @@
 -(void)webViewProgress:(NJKWebViewProgress *)webViewProgress updateProgress:(float)progress
 {
     [self.progressView setProgress:progress animated:YES];
+    
+    // Once loading has started, the black bars bug in UIWebView will be gone, so we can
+    // swap back to opaque for performance
+    if (self.webView.opaque == NO) {
+        self.webView.opaque = YES;
+    }
     
     //Query the webview to see what load state JavaScript perceives it at
     NSString *readyState = [self.webView stringByEvaluatingJavaScriptFromString:@"document.readyState"];
@@ -830,6 +873,11 @@
             
             if (title.length)
                 self.title = title;
+        } else if (self.showPageHost) {
+            NSString *host = [self.webView stringByEvaluatingJavaScriptFromString:@"window.location.hostname"];
+            if (host.length) {
+                self.title = [self shortenHostname:host];
+            }
         }
         
         //if we're matching the view BG to the web view, update the background colour now
@@ -842,6 +890,15 @@
     }
     
     [self refreshButtonsState];
+}
+
+- (NSString *)shortenHostname:(NSString *)hostname {
+    if (hostname && hostname.length) {
+        if ([hostname hasPrefix:@"www"]) {
+            return [hostname substringFromIndex:4];
+        }
+    }
+    return hostname;
 }
 
 #pragma mark -
@@ -888,11 +945,8 @@
 - (void)showPlaceholderTitle
 {
     //set the title to the URL until we load the page properly
-    if (self.url && self.showPageTitles && self.showUrlWhileLoading) {
-        NSString *url = [_url absoluteString];
-        url = [url stringByReplacingOccurrencesOfString:@"http://" withString:@""];
-        url = [url stringByReplacingOccurrencesOfString:@"https://" withString:@""];
-        self.title = url;
+    if (self.url && (self.showPageTitles || self.showPageHost) && self.showUrlWhileLoading) {
+        self.title = [self shortenHostname:_url.host];
     }
     else if (self.showPageTitles) {
         self.title = NSLocalizedStringFromTable(@"Loading...", @"TOWebViewControllerLocalizable", @"Loading...");

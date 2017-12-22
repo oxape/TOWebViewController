@@ -1,7 +1,7 @@
 //
 //  TOWebViewController.h
 //
-//  Copyright 2013-2016 Timothy Oliver. All rights reserved.
+//  Copyright 2013-2017 Timothy Oliver. All rights reserved.
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to
@@ -36,7 +36,7 @@
 /**
  Initializes a new `TOWebViewController` object with the specified URL string.
  
- @param url The URL as a string, of the web page that the controller will initially display.
+ @param urlString The URL as a string, of the web page that the controller will initially display.
  
  @return The newly initialized `TOWebViewController` object.
  */
@@ -141,6 +141,13 @@
  */
 @property (nonatomic,assign)    BOOL showPageTitles;
 
+/**
+ View controller's title property will be set to the page's host. www prefix will be stripped
+ 
+ Default value is NO.
+ */
+@property (nonatomic,assign)    BOOL showPageHost;
+
 /** 
  Disables the contextual popups that can appear when the user taps and holds on a page link.
  
@@ -167,6 +174,11 @@
  determine whether to let them proceed or not.
  */
 @property (nonatomic,copy)      BOOL (^shouldStartLoadRequestHandler)(NSURLRequest *request, UIWebViewNavigationType navigationType);
+
+/**
+ An optional block that when set, will be triggered if the web view failed to load a frame.
+ */
+@property (nonatomic,copy)      void (^didFailLoadWithErrorRequestHandler)(NSError *error);
 
 /**
 An optional block that when set, will be triggered each time the web view has finished a load operation.
