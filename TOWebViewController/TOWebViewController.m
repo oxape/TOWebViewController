@@ -506,7 +506,7 @@
     //Reset the lot
     self.toolbarItems = nil;
     self.navigationItem.leftBarButtonItems = nil;
-    self.navigationItem.rightBarButtonItems = nil;
+//    self.navigationItem.rightBarButtonItems = nil;
     self.navigationItem.leftItemsSupplementBackButton = NO;
     
     //If we've got explicitly set application items in the navigation bar, set them up before handling screen cases
@@ -602,6 +602,7 @@
             [rightItems addObject:item];
             [rightItems addObject:fixedSpace];
         }
+        self.navigationItem.rightBarButtonItems = rightItems;
     }
     else {
         [leftItems addObject:fixedSpace];
@@ -615,11 +616,12 @@
             [leftItems addObject:item];
             [leftItems addObject:fixedSpace];
         }
+//        self.navigationItem.rightBarButtonItems = rightItems;
     }
     
     self.navigationItem.leftBarButtonItems = leftItems;
     self.navigationItem.leftItemsSupplementBackButton = YES;
-    self.navigationItem.rightBarButtonItems = rightItems;
+//    self.navigationItem.rightBarButtonItems = rightItems;
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection
